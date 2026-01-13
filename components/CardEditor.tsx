@@ -43,6 +43,21 @@ const compressImage = (base64Str: string, maxWidth = 800, quality = 0.7): Promis
   });
 };
 
+// Helper for MySQL Date Format (YYYY-MM-DD HH:MM:SS)
+const getMySQLDate = () => {
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  const hours = pad(now.getHours());
+  const minutes = pad(now.getMinutes());
+  const seconds = pad(now.getSeconds());
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
 const CardEditor: React.FC = () => {
   // --- STATE ---
   const [step, setStep] = useState<EditorStep>('select-game');
@@ -193,7 +208,7 @@ const CardEditor: React.FC = () => {
     
     const newOrder: Order = {
       id: `ORD-${Math.floor(Math.random() * 1000000)}`,
-      date: new Date().toISOString(),
+      date: getMySQLDate(), // Changed from toISOString() to fix MySQL error
       customer: orderDetails,
       gameType: selectedGame!,
       cardStyle: selectedStyle!,
