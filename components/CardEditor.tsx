@@ -14,6 +14,35 @@ import {
 // Steps of the Order Wizard
 type EditorStep = 'select-game' | 'select-style' | 'design-back' | 'edit-deck' | 'design-package' | 'checkout' | 'success';
 
+// --- UTILS ---
+const compressImage = (base64Str: string, maxWidth = 800, quality = 0.7): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = (maxWidth / width) * height;
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } else {
+        resolve(base64Str); // Fallback
+      }
+    };
+    img.onerror = () => resolve(base64Str); // Fallback on error
+  });
+};
+
 const CardEditor: React.FC = () => {
   // --- STATE ---
   const [step, setStep] = useState<EditorStep>('select-game');
@@ -43,6 +72,7 @@ const CardEditor: React.FC = () => {
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   // --- PERSISTENCE ---
   useEffect(() => {
@@ -69,11 +99,15 @@ const CardEditor: React.FC = () => {
 
   useEffect(() => {
     if (!isInitializing && step !== 'success') {
-      if (deck.length > 0) localStorage.setItem('mycards-deck', JSON.stringify(deck));
-      if (selectedGame) localStorage.setItem('mycards-game', selectedGame);
-      if (selectedStyle) localStorage.setItem('mycards-style', selectedStyle);
-      localStorage.setItem('mycards-back', JSON.stringify(backConfig));
-      localStorage.setItem('mycards-step', step);
+      try {
+        if (deck.length > 0) localStorage.setItem('mycards-deck', JSON.stringify(deck));
+        if (selectedGame) localStorage.setItem('mycards-game', selectedGame);
+        if (selectedStyle) localStorage.setItem('mycards-style', selectedStyle);
+        localStorage.setItem('mycards-back', JSON.stringify(backConfig));
+        localStorage.setItem('mycards-step', step);
+      } catch (e) {
+        console.warn("LocalStorage quota exceeded. Some progress might not be saved locally.");
+      }
     }
   }, [deck, selectedGame, selectedStyle, backConfig, step, isInitializing]);
 
@@ -173,8 +207,8 @@ const CardEditor: React.FC = () => {
     const success = await dbService.saveOrder(newOrder);
 
     if (!success) {
-      alert("Chyba: Objednávka nemohla být uložena. Zkuste to prosím znovu.");
       setIsProcessingPayment(false);
+      // Alert is handled in dbService fallback or here if critical
       return;
     }
 
@@ -201,19 +235,30 @@ const CardEditor: React.FC = () => {
       setBackConfig(prev => ({ ...prev, ...updates }));
   };
 
-  // Generic Image Upload
+  // Generic Image Upload with Compression
   const handleImageUpload = (
       e: React.ChangeEvent<HTMLInputElement>, 
       isBack: boolean = false
   ) => {
     const file = e.target.files?.[0];
     if (file) {
+      setIsCompressing(true);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        if (isBack) {
-            updateBack({ customImage: reader.result as string, imageScale: 1, imageX: 0, imageY: 0 });
-        } else if (activeCardId) {
-            updateCard(activeCardId, { customImage: reader.result as string, isBackgroundRemoved: false, imageScale: 1, imageX: 0, imageY: 0 });
+      reader.onloadend = async () => {
+        const originalBase64 = reader.result as string;
+        try {
+          // Compress image to max 800px width and 0.7 quality
+          const compressedBase64 = await compressImage(originalBase64);
+          
+          if (isBack) {
+              updateBack({ customImage: compressedBase64, imageScale: 1, imageX: 0, imageY: 0 });
+          } else if (activeCardId) {
+              updateCard(activeCardId, { customImage: compressedBase64, isBackgroundRemoved: false, imageScale: 1, imageX: 0, imageY: 0 });
+          }
+        } catch (err) {
+          console.error("Compression failed", err);
+        } finally {
+          setIsCompressing(false);
         }
       };
       reader.readAsDataURL(file);
@@ -423,8 +468,8 @@ const CardEditor: React.FC = () => {
                      {!backConfig.customImage ? (
                        <div className="relative group w-full aspect-video rounded-xl border-2 border-dashed border-white/10 hover:border-gold-500/50 bg-black/20 hover:bg-black/40 transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden">
                           <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, true)} className="absolute inset-0 opacity-0 cursor-pointer z-20" />
-                          <Upload className="text-gray-400 group-hover:text-gold-400 mb-2 transition-colors" />
-                          <span className="text-gray-400 text-sm group-hover:text-white">Nahrát fotku</span>
+                          {isCompressing ? <Loader2 className="animate-spin text-gold-500 mb-2"/> : <Upload className="text-gray-400 group-hover:text-gold-400 mb-2 transition-colors" />}
+                          <span className="text-gray-400 text-sm group-hover:text-white">{isCompressing ? 'Zpracování...' : 'Nahrát fotku'}</span>
                        </div>
                      ) : (
                        <div className="space-y-4">
@@ -434,7 +479,10 @@ const CardEditor: React.FC = () => {
                               </div>
                               <div className="relative flex-1">
                                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, true)} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                                <button className="w-full text-xs bg-white/5 hover:bg-white/10 text-white py-2 rounded-lg border border-white/10 transition-all">Změnit fotku</button>
+                                <button className="w-full text-xs bg-white/5 hover:bg-white/10 text-white py-2 rounded-lg border border-white/10 transition-all flex items-center justify-center gap-2">
+                                    {isCompressing && <Loader2 className="animate-spin w-3 h-3"/>}
+                                    Změnit fotku
+                                </button>
                               </div>
                            </div>
                            
@@ -451,7 +499,7 @@ const CardEditor: React.FC = () => {
                  </div>
 
                  <div className="pt-6 mt-6 border-t border-white/10 flex justify-end">
-                     <button onClick={handleBackDesignComplete} className="bg-gold-500 hover:bg-gold-400 text-navy-900 font-bold py-3 px-6 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-gold-500/20">
+                     <button onClick={handleBackDesignComplete} disabled={isCompressing} className="bg-gold-500 hover:bg-gold-400 text-navy-900 font-bold py-3 px-6 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-gold-500/20 disabled:opacity-50">
                         {selectedStyle === CardStyle.BackOnly ? 'Dokončit a Zabalit' : 'Pokračovat na Líce'} <ArrowRight size={16}/>
                      </button>
                  </div>
@@ -520,8 +568,8 @@ const CardEditor: React.FC = () => {
                  {!activeCard.customImage ? (
                    <div className="relative group w-full aspect-video rounded-xl border-2 border-dashed border-white/10 hover:border-gold-500/50 bg-black/20 hover:bg-black/40 transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden">
                       <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e)} className="absolute inset-0 opacity-0 cursor-pointer z-20" />
-                      <Upload className="text-gray-400 group-hover:text-gold-400 mb-2 transition-colors" />
-                      <span className="text-gray-400 text-sm group-hover:text-white">Nahrát fotku</span>
+                      {isCompressing ? <Loader2 className="animate-spin text-gold-500 mb-2"/> : <Upload className="text-gray-400 group-hover:text-gold-400 mb-2 transition-colors" />}
+                      <span className="text-gray-400 text-sm group-hover:text-white">{isCompressing ? 'Zpracování...' : 'Nahrát fotku'}</span>
                    </div>
                  ) : (
                    <div className="space-y-4">
@@ -536,7 +584,10 @@ const CardEditor: React.FC = () => {
                           <div className="flex flex-col gap-2 w-full">
                              <div className="relative">
                                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e)} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                                <button className="w-full text-xs bg-white/5 hover:bg-white/10 text-white py-2 rounded-lg border border-white/10 transition-all">Změnit fotku</button>
+                                <button className="w-full text-xs bg-white/5 hover:bg-white/10 text-white py-2 rounded-lg border border-white/10 transition-all flex items-center justify-center gap-2">
+                                    {isCompressing && <Loader2 className="animate-spin w-3 h-3"/>}
+                                    Změnit fotku
+                                </button>
                              </div>
                              <button onClick={handleRemoveBackground} disabled={isRemovingBg} className={`w-full text-xs py-2 rounded-lg border transition-all flex items-center justify-center gap-2 ${activeCard.isBackgroundRemoved ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-gold-500/10 border-gold-500/30 text-gold-400'}`}>
                                 {isRemovingBg ? <Loader2 className="animate-spin w-3 h-3"/> : <Eraser size={14}/>}
