@@ -51,6 +51,7 @@ export interface CardConfig {
   suit: Suit;
   rank: Rank;
   customImage: string | null;
+  templateImage?: string; // URL to the static card background/frame
   isBackgroundRemoved?: boolean;
   imageScale: number;
   imageX: number;
@@ -58,6 +59,7 @@ export interface CardConfig {
   customText: string;
   borderColor: string;
   gameType: GameType;
+  isLocked?: boolean; // New property to prevent editing specific cards
 }
 
 export interface CardBackConfig {

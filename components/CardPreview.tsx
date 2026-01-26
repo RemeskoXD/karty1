@@ -11,6 +11,7 @@ interface CardPreviewProps {
   selected?: boolean;
   printMode?: boolean;
   side?: 'face' | 'back';
+  showCenterMark?: boolean; // New prop for positioning help
 }
 
 const CardPreview: React.FC<CardPreviewProps> = ({ 
@@ -20,7 +21,8 @@ const CardPreview: React.FC<CardPreviewProps> = ({
   onClick, 
   selected, 
   printMode = false,
-  side = 'face'
+  side = 'face',
+  showCenterMark = false
 }) => {
   // Determine if we are rendering Back or Face
   const isBack = side === 'back';
@@ -47,7 +49,6 @@ const CardPreview: React.FC<CardPreviewProps> = ({
 
   // --- RENDER BACK ---
   if (isBack) {
-    // Default Back Pattern if no custom image
     const defaultPattern = "radial-gradient(circle, #0F1623 0%, #05080F 100%)";
     const image = backConfig?.customImage;
     const scale = backConfig?.imageScale || 1;
@@ -75,6 +76,13 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                   className="w-full h-full object-cover transition-transform duration-100"
                   style={{ transform: `scale(${scale}) translate(${x}%, ${y}%)` }}
                 />
+                {showCenterMark && !printMode && (
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
+                    <div className="w-8 h-[1px] bg-gold-500/50 absolute"></div>
+                    <div className="h-8 w-[1px] bg-gold-500/50 absolute"></div>
+                    <div className="w-2 h-2 rounded-full border border-gold-500/50 absolute"></div>
+                  </div>
+                )}
              </div>
            ) : (
              <div className="absolute inset-0 flex items-center justify-center opacity-20">
@@ -90,7 +98,6 @@ const CardPreview: React.FC<CardPreviewProps> = ({
             </div>
            )}
 
-           {/* Default Texture for back if no image */}
            {!image && !printMode && (
              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
            )}
@@ -100,13 +107,23 @@ const CardPreview: React.FC<CardPreviewProps> = ({
   }
 
   // --- RENDER FACE ---
-  if (!card) return null; // Safety check
+  if (!card) return null;
 
   const isJoker = card.rank === Rank.Joker;
   const isRed = card.suit === Suit.Hearts || card.suit === Suit.Diamonds;
   const isJokerRed = isJoker && (card.suit === Suit.Hearts || card.suit === Suit.Diamonds);
   const isSingleHeaded = card.gameType === GameType.MariasSingle;
   const rankLabel = getRankLabel(card.rank, card.gameType);
+  const hasTemplate = !!card.templateImage;
+
+  // Determine if user image should be BEHIND the template (for Faces/Masks/Frames)
+  // Logic: 
+  // 1. If it's explicitly the 'obliceje' style.
+  // 2. OR if it is MariasSingle game type (because high cards use PNG frames with transparency).
+  const isMaskStyle = hasTemplate && (
+    card.templateImage?.includes('RUB_a_LIC_obliceje') || 
+    card.gameType === GameType.MariasSingle
+  );
 
   const containerClasses = printMode 
     ? `relative w-full h-full overflow-hidden bg-white ${className}`
@@ -119,57 +136,71 @@ const CardPreview: React.FC<CardPreviewProps> = ({
   return (
     <div onClick={!printMode ? onClick : undefined} className={containerClasses}>
       <div className={innerClasses} style={{ borderColor: printMode ? '#000000' : card.borderColor }}>
-        {/* CORNERS */}
-        <div className="absolute top-[5%] left-[5%] flex flex-col items-center z-20">
-          {isJoker ? (
-             <div className="flex flex-col items-center">
-                <div className={`w-5 h-5 mb-1 ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`}>
-                   {getSuitIcon(card.suit, "w-full h-full", true)}
+        
+        {/* CORNERS (Only show if no template image is present, or if it's not a full card design) */}
+        {!hasTemplate && (
+            <>
+                <div className="absolute top-[5%] left-[5%] flex flex-col items-center z-20">
+                {isJoker ? (
+                    <div className="flex flex-col items-center">
+                        <div className={`w-5 h-5 mb-1 ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`}>
+                        {getSuitIcon(card.suit, "w-full h-full", true)}
+                        </div>
+                        <span className={`text-[8px] md:text-[10px] font-bold font-sans tracking-tighter uppercase writing-mode-vertical ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`} style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
+                            JOKER
+                        </span>
+                    </div>
+                ) : (
+                    <>
+                        <span className={`text-xl md:text-2xl font-bold font-serif leading-none ${isRed ? 'text-red-600' : 'text-slate-800'}`}>
+                        {rankLabel}
+                        </span>
+                        <div className="w-4 h-4 md:w-5 md:h-5 mt-0.5">
+                            {getSuitIcon(card.suit, "w-full h-full")}
+                        </div>
+                    </>
+                )}
                 </div>
-                <span className={`text-[8px] md:text-[10px] font-bold font-sans tracking-tighter uppercase writing-mode-vertical ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`} style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
-                  JOKER
-                </span>
-             </div>
-          ) : (
-             <>
-               <span className={`text-xl md:text-2xl font-bold font-serif leading-none ${isRed ? 'text-red-600' : 'text-slate-800'}`}>
-                 {rankLabel}
-               </span>
-               <div className="w-4 h-4 md:w-5 md:h-5 mt-0.5">
-                  {getSuitIcon(card.suit, "w-full h-full")}
-               </div>
-             </>
-          )}
-        </div>
 
-        {!isSingleHeaded && (
-          <div className="absolute bottom-[5%] right-[5%] flex flex-col items-center transform rotate-180 z-20">
-            {isJoker ? (
-               <div className="flex flex-col items-center">
-                  <div className={`w-5 h-5 mb-1 ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`}>
-                     {getSuitIcon(card.suit, "w-full h-full", true)}
-                  </div>
-                  <span className={`text-[8px] md:text-[10px] font-bold font-sans tracking-tighter uppercase writing-mode-vertical ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`} style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
-                    JOKER
-                  </span>
-               </div>
-            ) : (
-               <>
-                 <span className={`text-xl md:text-2xl font-bold font-serif leading-none ${isRed ? 'text-red-600' : 'text-slate-800'}`}>
-                   {rankLabel}
-                 </span>
-                 <div className="w-4 h-4 md:w-5 md:h-5 mt-0.5">
-                   {getSuitIcon(card.suit, "w-full h-full")}
-                 </div>
-               </>
-            )}
-          </div>
+                {!isSingleHeaded && (
+                <div className="absolute bottom-[5%] right-[5%] flex flex-col items-center transform rotate-180 z-20">
+                    {isJoker ? (
+                    <div className="flex flex-col items-center">
+                        <div className={`w-5 h-5 mb-1 ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`}>
+                            {getSuitIcon(card.suit, "w-full h-full", true)}
+                        </div>
+                        <span className={`text-[8px] md:text-[10px] font-bold font-sans tracking-tighter uppercase writing-mode-vertical ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`} style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
+                            JOKER
+                        </span>
+                    </div>
+                    ) : (
+                    <>
+                        <span className={`text-xl md:text-2xl font-bold font-serif leading-none ${isRed ? 'text-red-600' : 'text-slate-800'}`}>
+                        {rankLabel}
+                        </span>
+                        <div className="w-4 h-4 md:w-5 md:h-5 mt-0.5">
+                        {getSuitIcon(card.suit, "w-full h-full")}
+                        </div>
+                    </>
+                    )}
+                </div>
+                )}
+            </>
         )}
 
         {/* IMAGE AREA */}
         <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden">
+           
+           {/* Layer 1: Template Image (Only if it is BACKGROUND/Bottom Layer - i.e. NOT a mask) */}
+           {hasTemplate && !isMaskStyle && (
+               <div className="absolute inset-0 z-0">
+                   <img src={card.templateImage} alt="Template" className="w-full h-full object-cover" />
+               </div>
+           )}
+
+           {/* Layer 2: User Custom Image */}
            {card.customImage ? (
-             <div className="relative w-full h-full">
+             <div className={`relative w-full h-full ${isMaskStyle ? 'z-0' : 'z-10'}`}>
                {card.isBackgroundRemoved && !printMode && (
                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/az-subtle.png')] opacity-30 z-0"></div>
                )}
@@ -203,21 +234,40 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                )}
              </div>
            ) : (
-             <div className="text-gray-300 flex flex-col items-center p-4 text-center">
-               {isJoker ? (
-                 <div className={`w-24 h-24 opacity-20 ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`}>
-                    {getSuitIcon(card.suit, "w-full h-full", true)}
-                 </div>
-               ) : (
-                 <span className="mb-2 text-3xl opacity-20">📷</span>
-               )}
-             </div>
+             // Placeholder icon if no custom image AND no template
+             !hasTemplate && (
+                 <div className="text-gray-300 flex flex-col items-center p-4 text-center z-10">
+                {isJoker ? (
+                    <div className={`w-24 h-24 opacity-20 ${isJokerRed ? 'text-red-600' : 'text-slate-900'}`}>
+                        {getSuitIcon(card.suit, "w-full h-full", true)}
+                    </div>
+                ) : (
+                    <span className="mb-2 text-3xl opacity-20">📷</span>
+                )}
+                </div>
+             )
+           )}
+
+           {/* Layer 3: Template Image (If it IS a mask/Face/Frame style - Render ON TOP) */}
+           {hasTemplate && isMaskStyle && (
+               <div className="absolute inset-0 z-20 pointer-events-none">
+                   <img src={card.templateImage} alt="Template" className="w-full h-full object-cover" />
+               </div>
+           )}
+
+           {/* Center Mark Overlay */}
+           {showCenterMark && !printMode && card.customImage && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-30">
+                <div className="w-8 h-[1px] bg-gold-500/50 absolute"></div>
+                <div className="h-8 w-[1px] bg-gold-500/50 absolute"></div>
+                <div className="w-2 h-2 rounded-full border border-gold-500/50 absolute"></div>
+              </div>
            )}
         </div>
 
         {/* CUSTOM TEXT */}
         {card.customText && (
-          <div className={`absolute left-0 right-0 z-30 flex justify-center ${isSingleHeaded ? 'bottom-[10%]' : 'top-1/2 -translate-y-1/2'}`}>
+          <div className={`absolute left-0 right-0 z-40 flex justify-center ${isSingleHeaded ? 'bottom-[10%]' : 'top-1/2 -translate-y-1/2'}`}>
             <span 
               className={`bg-white/90 backdrop-blur-sm px-3 py-1 text-navy-900 font-serif font-bold italic shadow-lg text-xs md:text-sm border-y border-gold-400 ${printMode ? 'border text-black' : ''}`}
             >
@@ -226,7 +276,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
           </div>
         )}
 
-        {!printMode && <div className="absolute inset-1 border border-gold-400 opacity-30 rounded-[8px] pointer-events-none z-40"></div>}
+        {!printMode && <div className="absolute inset-1 border border-gold-400 opacity-30 rounded-[8px] pointer-events-none z-50"></div>}
       </div>
     </div>
   );
