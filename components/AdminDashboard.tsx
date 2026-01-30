@@ -175,7 +175,16 @@ const AdminDashboard: React.FC = () => {
                     cacheBust: true,
                     skipAutoScale: true,
                     backgroundColor: 'white',
-                    style: { transform: 'none' }
+                    style: { transform: 'none' },
+                    // IGNORE FONTS TO PREVENT CORS CRASH
+                    fontEmbedCSS: '', 
+                    filter: (node) => {
+                        // Filter out external stylesheets which cause security errors
+                        if (node.tagName === 'LINK' && (node as HTMLLinkElement).rel === 'stylesheet') {
+                            return false; 
+                        }
+                        return true;
+                    }
                 });
 
                 if (blob) {
@@ -204,7 +213,15 @@ const AdminDashboard: React.FC = () => {
                     pixelRatio: 1,
                     cacheBust: true,
                     skipAutoScale: true,
-                    backgroundColor: 'white'
+                    backgroundColor: 'white',
+                    // IGNORE FONTS TO PREVENT CORS CRASH
+                    fontEmbedCSS: '',
+                    filter: (node) => {
+                        if (node.tagName === 'LINK' && (node as HTMLLinkElement).rel === 'stylesheet') {
+                            return false;
+                        }
+                        return true;
+                    }
                 });
                 if (blob) {
                     console.log(`[Export] OK: Zadní strana vytvořena`);

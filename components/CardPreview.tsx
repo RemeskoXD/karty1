@@ -73,6 +73,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                 <img 
                   src={image} 
                   alt="Card Back" 
+                  crossOrigin="anonymous"
                   className="w-full h-full object-cover transition-transform duration-100"
                   style={{ transform: `scale(${scale}) translate(${x}%, ${y}%)` }}
                 />
@@ -194,7 +195,12 @@ const CardPreview: React.FC<CardPreviewProps> = ({
            {/* Layer 1: Template Image (Only if it is BACKGROUND/Bottom Layer - i.e. NOT a mask) */}
            {hasTemplate && !isMaskStyle && (
                <div className="absolute inset-0 z-0">
-                   <img src={card.templateImage} alt="Template" className="w-full h-full object-cover" />
+                   <img 
+                    src={card.templateImage} 
+                    alt="Template" 
+                    crossOrigin="anonymous"
+                    className="w-full h-full object-cover" 
+                   />
                </div>
            )}
 
@@ -209,6 +215,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                  <img 
                    src={card.customImage} 
                    alt="Custom" 
+                   crossOrigin="anonymous"
                    className={`w-full h-full object-cover z-10 transition-transform duration-100 ${card.isBackgroundRemoved ? 'object-contain scale-90' : ''}`}
                    style={{ transform: `scale(${card.imageScale}) translate(${card.imageX}%, ${card.imageY}%)` }}
                  />
@@ -218,6 +225,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                       <img 
                         src={card.customImage} 
                         alt="Top" 
+                        crossOrigin="anonymous"
                         className={`w-full h-[200%] object-cover object-top transition-transform duration-100 ${card.isBackgroundRemoved ? 'object-contain' : ''}`}
                         style={{ transform: `scale(${card.imageScale}) translate(${card.imageX}%, ${card.imageY}%)` }}
                       />
@@ -226,6 +234,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                       <img 
                         src={card.customImage} 
                         alt="Bottom" 
+                        crossOrigin="anonymous"
                         className={`w-full h-[200%] object-cover object-top transition-transform duration-100 ${card.isBackgroundRemoved ? 'object-contain' : ''}`}
                         style={{ transform: `scale(${card.imageScale}) translate(${card.imageX}%, ${card.imageY}%)` }}
                       />
@@ -251,7 +260,12 @@ const CardPreview: React.FC<CardPreviewProps> = ({
            {/* Layer 3: Template Image (If it IS a mask/Face/Frame style - Render ON TOP) */}
            {hasTemplate && isMaskStyle && (
                <div className="absolute inset-0 z-20 pointer-events-none">
-                   <img src={card.templateImage} alt="Template" className="w-full h-full object-cover" />
+                   <img 
+                    src={card.templateImage} 
+                    alt="Template" 
+                    crossOrigin="anonymous"
+                    className="w-full h-full object-cover" 
+                   />
                </div>
            )}
 
