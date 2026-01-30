@@ -30,6 +30,17 @@ const CardPreview: React.FC<CardPreviewProps> = ({
   // Safe accessors depending on what data we have
   const gameType = card?.gameType || GameType.PokerStandard; // Fallback for back preview
   
+  // Helper to force fresh image load during export to avoid CORS cache issues
+  const processUrl = (url: string | null | undefined) => {
+    if (!url) return undefined;
+    if (printMode) {
+      // Append timestamp to bypass cache and force browser to respect CORS headers
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}t=${Date.now()}`;
+    }
+    return url;
+  };
+  
   // Aspect Ratio
   const getAspectRatioClass = () => {
     if (printMode) return 'w-full h-full';
@@ -50,7 +61,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
   // --- RENDER BACK ---
   if (isBack) {
     const defaultPattern = "radial-gradient(circle, #0F1623 0%, #05080F 100%)";
-    const image = backConfig?.customImage;
+    const image = processUrl(backConfig?.customImage);
     const scale = backConfig?.imageScale || 1;
     const x = backConfig?.imageX || 0;
     const y = backConfig?.imageY || 0;
@@ -116,6 +127,10 @@ const CardPreview: React.FC<CardPreviewProps> = ({
   const isSingleHeaded = card.gameType === GameType.MariasSingle;
   const rankLabel = getRankLabel(card.rank, card.gameType);
   const hasTemplate = !!card.templateImage;
+
+  // Process URLs for export
+  const templateImageSrc = processUrl(card.templateImage);
+  const customImageSrc = processUrl(card.customImage);
 
   // Determine if user image should be BEHIND the template (for Faces/Masks/Frames)
   // Logic: 
@@ -193,10 +208,10 @@ const CardPreview: React.FC<CardPreviewProps> = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden">
            
            {/* Layer 1: Template Image (Only if it is BACKGROUND/Bottom Layer - i.e. NOT a mask) */}
-           {hasTemplate && !isMaskStyle && (
+           {hasTemplate && !isMaskStyle && templateImageSrc && (
                <div className="absolute inset-0 z-0">
                    <img 
-                    src={card.templateImage} 
+                    src={templateImageSrc} 
                     alt="Template" 
                     crossOrigin="anonymous"
                     className="w-full h-full object-cover" 
@@ -205,7 +220,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
            )}
 
            {/* Layer 2: User Custom Image */}
-           {card.customImage ? (
+           {customImageSrc ? (
              <div className={`relative w-full h-full ${isMaskStyle ? 'z-0' : 'z-10'}`}>
                {card.isBackgroundRemoved && !printMode && (
                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/az-subtle.png')] opacity-30 z-0"></div>
@@ -213,7 +228,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
 
                {isSingleHeaded ? (
                  <img 
-                   src={card.customImage} 
+                   src={customImageSrc} 
                    alt="Custom" 
                    crossOrigin="anonymous"
                    className={`w-full h-full object-cover z-10 transition-transform duration-100 ${card.isBackgroundRemoved ? 'object-contain scale-90' : ''}`}
@@ -223,7 +238,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                  <>
                    <div className="absolute top-0 left-0 right-0 h-1/2 overflow-hidden z-10">
                       <img 
-                        src={card.customImage} 
+                        src={customImageSrc} 
                         alt="Top" 
                         crossOrigin="anonymous"
                         className={`w-full h-[200%] object-cover object-top transition-transform duration-100 ${card.isBackgroundRemoved ? 'object-contain' : ''}`}
@@ -232,7 +247,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({
                    </div>
                    <div className="absolute bottom-0 left-0 right-0 h-1/2 overflow-hidden transform rotate-180 z-10 border-t border-white/20">
                       <img 
-                        src={card.customImage} 
+                        src={customImageSrc} 
                         alt="Bottom" 
                         crossOrigin="anonymous"
                         className={`w-full h-[200%] object-cover object-top transition-transform duration-100 ${card.isBackgroundRemoved ? 'object-contain' : ''}`}
@@ -258,10 +273,10 @@ const CardPreview: React.FC<CardPreviewProps> = ({
            )}
 
            {/* Layer 3: Template Image (If it IS a mask/Face/Frame style - Render ON TOP) */}
-           {hasTemplate && isMaskStyle && (
+           {hasTemplate && isMaskStyle && templateImageSrc && (
                <div className="absolute inset-0 z-20 pointer-events-none">
                    <img 
-                    src={card.templateImage} 
+                    src={templateImageSrc} 
                     alt="Template" 
                     crossOrigin="anonymous"
                     className="w-full h-full object-cover" 

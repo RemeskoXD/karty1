@@ -151,8 +151,8 @@ const AdminDashboard: React.FC = () => {
             await new Promise<void>(resolve => {
                 setExportingCard(card);
                 setExportingSide('face');
-                // Zvýšen timeout pro jistotu načtení obrázků
-                setTimeout(resolve, 500); 
+                // Increased wait time to allow image loading with cache-busting params
+                setTimeout(resolve, 600); 
             });
 
             if (!exportRef.current) {
@@ -160,12 +160,12 @@ const AdminDashboard: React.FC = () => {
                 continue;
             }
 
-            // Debug velikosti elementu
-            const elWidth = exportRef.current.offsetWidth;
-            const elHeight = exportRef.current.offsetHeight;
-            if (elWidth === 0 || elHeight === 0) {
-                 console.warn(`[Export] VAROVÁNÍ: Element má nulové rozměry! (${elWidth}x${elHeight})`);
-            }
+            // Check if images are loaded inside the ref
+            const images = exportRef.current.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+            }));
 
             try {
                 const blob = await htmlToImage.toBlob(exportRef.current, {
@@ -203,9 +203,16 @@ const AdminDashboard: React.FC = () => {
         setExportProgress("Generuji zadní stranu...");
         setExportingCard(order.deck[0]); 
         setExportingSide('back');
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 600));
 
         if (exportRef.current) {
+            // Check images
+            const images = exportRef.current.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+            }));
+
             try {
                 const blob = await htmlToImage.toBlob(exportRef.current, {
                     width: dims.width,
