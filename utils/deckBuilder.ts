@@ -43,6 +43,28 @@ export const GAME_VARIANTS: Record<GameType, GameConfig> = {
   }
 };
 
+export const getGameShortCode = (gameType: GameType): string => {
+    switch(gameType) {
+        case GameType.MariasSingle: return 'M1H';
+        case GameType.MariasDouble: return 'M2H';
+        case GameType.PokerStandard: return 'PST';
+        case GameType.PokerBig: return 'P4B';
+        case GameType.Canasta: return 'CAN';
+        default: return 'UKN';
+    }
+};
+
+// 300 DPI calculation (1 mm = 11.811 px)
+// Returns object with width and height in pixels
+export const getPrintDimensions = (gameType: GameType): { width: number, height: number } => {
+    const mm = GAME_VARIANTS[gameType].dimensions;
+    const DPI_FACTOR = 11.811; 
+    return {
+        width: Math.round(mm.width * DPI_FACTOR),
+        height: Math.round(mm.height * DPI_FACTOR)
+    };
+};
+
 const getMariasFileName = (prefix: 'm1h' | 'm2h', rank: Rank, suit: Suit, version: string): string => {
     // Map Suits to Offset and Name
     let suitOffset = 0;

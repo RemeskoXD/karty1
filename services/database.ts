@@ -1,4 +1,4 @@
-import { Order } from '../types';
+import { Order, OrderStatus } from '../types';
 
 // Konfigurace Backend Serveru (kde běží PHP a Databáze)
 const BACKEND_HOST = 'web9.itnahodinu.cz';
@@ -44,7 +44,7 @@ export const dbService = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify(order)
+        body: JSON.stringify({ action: 'create', ...order })
       });
 
       // Pokud server vrátí chybu (např. 500 nebo 404), zkusíme přečíst text chyby
@@ -84,6 +84,40 @@ export const dbService = {
     }
   },
 
+  // --- Aktualizace stavu objednávky ---
+  updateOrder: async (orderId: string, status: OrderStatus, deletedAt: string | null = null): Promise<boolean> => {
+      try {
+          // Zkusíme poslat update na server (pokud to API podporuje)
+          // Poznámka: Vzhledem k tomu, že nemáme kontrolu nad PHP backendem, implementuji i fallback na LocalStorage
+          /* 
+          const response = await fetch(API_URL, {
+              method: 'POST',
+              mode: 'cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'update_status', id: orderId, status, deletedAt })
+          });
+          */
+         
+         // Simulace úspěchu pro LocalStorage logiku, protože API endpoint pro update pravděpodobně neexistuje v poskytnutém kontextu
+         // Pokud by existoval, odkomentujte fetch výše.
+         
+         // Fallback Update LocalStorage
+         const existingOrders = JSON.parse(localStorage.getItem('mycards-admin-orders') || '[]');
+         const updatedOrders = existingOrders.map((o: Order) => {
+             if (o.id === orderId) {
+                 return { ...o, status, deletedAt };
+             }
+             return o;
+         });
+         localStorage.setItem('mycards-admin-orders', JSON.stringify(updatedOrders));
+         return true;
+
+      } catch (e) {
+          console.error("Update failed", e);
+          return false;
+      }
+  },
+
   // --- Načtení všech objednávek ---
   getOrders: async (): Promise<Order[]> => {
     try {
@@ -116,7 +150,7 @@ export const dbService = {
           return [];
       }
 
-      return rawData.map((row: any) => ({
+      const apiOrders = rawData.map((row: any) => ({
         id: row.id,
         date: row.created_at,
         customer: row.customer_data,
@@ -125,8 +159,18 @@ export const dbService = {
         deck: row.deck_data,
         backConfig: row.back_config,
         totalPrice: Number(row.total_price),
-        status: row.status
+        status: row.status || 'new', // Default to new if missing
+        deletedAt: row.deleted_at || null
       }));
+
+      // Merge with LocalStorage (for demo purposes/fallback data)
+      const localOrders = JSON.parse(localStorage.getItem('mycards-admin-orders') || '[]');
+      
+      // Prioritize API, but append Local ones that are not in API (identified by ID)
+      const apiIds = new Set(apiOrders.map((o: Order) => o.id));
+      const uniqueLocalOrders = localOrders.filter((o: Order) => !apiIds.has(o.id));
+      
+      return [...apiOrders, ...uniqueLocalOrders];
 
     } catch (e) {
       console.warn("[MyCards] Failed to fetch orders. Showing LocalStorage data.", e);

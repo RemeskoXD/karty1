@@ -85,6 +85,8 @@ export interface OrderDetails {
   note: string;
 }
 
+export type OrderStatus = 'new' | 'processing' | 'issue' | 'done' | 'cancelled' | 'deleted';
+
 export interface Order {
   id: string;
   date: string; // ISO String
@@ -94,7 +96,8 @@ export interface Order {
   deck: CardConfig[];
   backConfig: CardBackConfig;
   totalPrice: number;
-  status: 'new' | 'printed' | 'shipped';
+  status: OrderStatus;
+  deletedAt?: string | null; // ISO String when moved to trash
 }
 
 export type NavItem = {
