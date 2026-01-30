@@ -120,16 +120,9 @@ const AdminDashboard: React.FC = () => {
 
   // --- EXPORT LOGIC ---
   const handleExportZip = async (order: Order) => {
-    console.log("Starting export for order:", order.id);
+    console.log(`%c[Export] ZAČÁTEK EXPORTU: ${order.id}`, 'color: green; font-weight: bold; font-size: 14px;');
     if (isExporting) return;
     
-    // Safety check for ref
-    if (!exportRef.current) {
-        console.error("Export Ref is null! The hidden container is not mounted.");
-        alert("Chyba exportu: Interní chyba (Ref missing). Zkuste obnovit stránku.");
-        return;
-    }
-
     setIsExporting(true);
     
     try {
@@ -143,7 +136,7 @@ const AdminDashboard: React.FC = () => {
         
         // Calculate Dimensions for 300 DPI
         const dims = getPrintDimensions(order.gameType);
-        console.log("Export dimensions:", dims);
+        console.log(`[Export] Rozměry pro tisk (300 DPI): ${dims.width}x${dims.height}px`);
         
         // 1. Generate Faces
         for (let i = 0; i < order.deck.length; i++) {
@@ -151,44 +144,57 @@ const AdminDashboard: React.FC = () => {
             const indexStr = (i + 1).toString().padStart(3, '0');
             const fileName = `${indexStr}_${card.suit}_${card.rank}.png`;
             
+            console.log(`[Export] Zpracovávám kartu ${i + 1}/${order.deck.length}: ${card.id} (${fileName})`);
             setExportProgress(`Generuji kartu ${i + 1} / ${order.deck.length}...`);
             
             // Wait for React to render
             await new Promise<void>(resolve => {
                 setExportingCard(card);
                 setExportingSide('face');
-                // Give it a moment to render image and load assets
-                setTimeout(resolve, 350); 
+                // Zvýšen timeout pro jistotu načtení obrázků
+                setTimeout(resolve, 500); 
             });
 
-            if (exportRef.current) {
-                try {
-                    const blob = await htmlToImage.toBlob(exportRef.current, {
-                        width: dims.width,
-                        height: dims.height,
-                        pixelRatio: 1, 
-                        cacheBust: true, 
-                        backgroundColor: 'white',
-                        style: { transform: 'none' }
-                    });
-                    if (blob) {
-                        zip.file(fileName, blob);
-                    } else {
-                        console.error(`Failed to generate blob for card ${card.id}`);
-                    }
-                } catch (err) {
-                    console.error(`Error capturing card ${card.id}`, err);
+            if (!exportRef.current) {
+                console.error(`[Export] CHYBA: Ref elementu neexistuje!`);
+                continue;
+            }
+
+            // Debug velikosti elementu
+            const elWidth = exportRef.current.offsetWidth;
+            const elHeight = exportRef.current.offsetHeight;
+            if (elWidth === 0 || elHeight === 0) {
+                 console.warn(`[Export] VAROVÁNÍ: Element má nulové rozměry! (${elWidth}x${elHeight})`);
+            }
+
+            try {
+                const blob = await htmlToImage.toBlob(exportRef.current, {
+                    width: dims.width,
+                    height: dims.height,
+                    pixelRatio: 1, 
+                    cacheBust: true,
+                    skipAutoScale: true,
+                    backgroundColor: 'white',
+                    style: { transform: 'none' }
+                });
+
+                if (blob) {
+                    console.log(`[Export] OK: Blob vytvořen (${(blob.size / 1024).toFixed(2)} KB)`);
+                    zip.file(fileName, blob);
+                } else {
+                    console.error(`[Export] CHYBA: Blob je null pro kartu ${card.id}`);
                 }
-            } else {
-                console.error("Ref lost during loop");
+            } catch (err) {
+                console.error(`[Export] FATÁLNÍ CHYBA html-to-image u karty ${card.id}:`, err);
             }
         }
 
         // 2. Generate Back
+        console.log(`[Export] Zpracovávám zadní stranu`);
         setExportProgress("Generuji zadní stranu...");
         setExportingCard(order.deck[0]); 
         setExportingSide('back');
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 500));
 
         if (exportRef.current) {
             try {
@@ -197,40 +203,52 @@ const AdminDashboard: React.FC = () => {
                     height: dims.height,
                     pixelRatio: 1,
                     cacheBust: true,
+                    skipAutoScale: true,
                     backgroundColor: 'white'
                 });
                 if (blob) {
+                    console.log(`[Export] OK: Zadní strana vytvořena`);
                     zip.file(`000_Back.png`, blob);
+                } else {
+                    console.error(`[Export] CHYBA: Blob zadní strany je null`);
                 }
             } catch (err) {
-                console.error("Error capturing back side", err);
+                console.error("[Export] CHYBA zadní strany:", err);
             }
         }
 
         // 3. Save
+        console.log(`[Export] Komprimuji ZIP...`);
         setExportProgress("Komprimuji ZIP...");
-        const content = await zip.generateAsync({ type: "blob" });
         
-        // Robust Save Logic
-        const saveFn = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
-        
-        if (typeof saveFn === 'function') {
-            saveFn(content, `${fileNameBase}.zip`);
-        } else {
-             // Fallback
-             const url = URL.createObjectURL(content);
-             const a = document.createElement('a');
-             a.href = url;
-             a.download = `${fileNameBase}.zip`;
-             document.body.appendChild(a);
-             a.click();
-             document.body.removeChild(a);
-             URL.revokeObjectURL(url);
+        try {
+            const content = await zip.generateAsync({ type: "blob" });
+            console.log(`[Export] ZIP hotov. Velikost: ${(content.size / 1024 / 1024).toFixed(2)} MB. Spouštím stahování...`);
+            
+            // Robust Save Logic
+            const saveFn = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
+            
+            if (typeof saveFn === 'function') {
+                saveFn(content, `${fileNameBase}.zip`);
+            } else {
+                 console.log(`[Export] Používám fallback metodu stahování (anchor tag)`);
+                 const url = URL.createObjectURL(content);
+                 const a = document.createElement('a');
+                 a.href = url;
+                 a.download = `${fileNameBase}.zip`;
+                 document.body.appendChild(a);
+                 a.click();
+                 document.body.removeChild(a);
+                 URL.revokeObjectURL(url);
+            }
+        } catch (zipErr) {
+            console.error("[Export] Chyba při generování ZIPu:", zipErr);
+            throw zipErr;
         }
 
     } catch (e: any) {
-        console.error("Export failed", e);
-        alert(`Export selhal: ${e.message || 'Neznámá chyba'}. Zkontrolujte konzoli.`);
+        console.error("[Export] CELKOVÁ CHYBA EXPORTU:", e);
+        alert(`Export selhal: ${e.message || 'Neznámá chyba'}. Zkontrolujte konzoli (F12).`);
     } finally {
         setIsExporting(false);
         setExportProgress('');
