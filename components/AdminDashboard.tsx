@@ -5,7 +5,7 @@ import { dbService } from '../services/database';
 import CardPreview from './CardPreview';
 import { Package, Download, Printer, User, Search, Trash2, ArrowLeft, Image as ImageIcon, RefreshCw, Lock, LogIn, CheckCircle, Clock, AlertTriangle, XCircle, RotateCcw, FileArchive, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
-import saveAs from 'file-saver';
+import * as FileSaver from 'file-saver';
 import * as htmlToImage from 'html-to-image';
 
 const AdminDashboard: React.FC = () => {
@@ -151,10 +151,6 @@ const AdminDashboard: React.FC = () => {
             // Wait for React to render the specific card in the hidden container
             await new Promise<void>(resolve => {
                 // We use a specific render function or state to update the hidden view
-                // For simplicity, we'll render ALL cards in hidden view and pick by ID?
-                // No, memory heavy. We will update a temporary state 'exportCard'
-                // But React state is async.
-                // Approach: Render specific component using ReactDOM.render? No, use state.
                 setExportingCard(card);
                 setExportingSide('face');
                 // Give it a moment to render image and load assets
@@ -167,11 +163,14 @@ const AdminDashboard: React.FC = () => {
                         width: dims.width,
                         height: dims.height,
                         pixelRatio: 1, // We set container to exact pixels, so ratio 1
-                        cacheBust: true,
+                        cacheBust: true, // Helps with CORS caching
+                        backgroundColor: 'white', // Ensure white background
                         style: { transform: 'none' } // reset any potential transforms
                     });
                     if (blob) {
                         zip.file(fileName, blob);
+                    } else {
+                        console.error(`Failed to generate blob for card ${card.id}`);
                     }
                 } catch (err) {
                     console.error(`Error capturing card ${card.id}`, err);
@@ -186,25 +185,47 @@ const AdminDashboard: React.FC = () => {
         await new Promise(r => setTimeout(r, 300));
 
         if (exportRef.current) {
-            const blob = await htmlToImage.toBlob(exportRef.current, {
-                width: dims.width,
-                height: dims.height,
-                pixelRatio: 1,
-                cacheBust: true
-            });
-            if (blob) {
-                zip.file(`000_Back.png`, blob);
+            try {
+                const blob = await htmlToImage.toBlob(exportRef.current, {
+                    width: dims.width,
+                    height: dims.height,
+                    pixelRatio: 1,
+                    cacheBust: true,
+                    backgroundColor: 'white'
+                });
+                if (blob) {
+                    zip.file(`000_Back.png`, blob);
+                }
+            } catch (err) {
+                console.error("Error capturing back side", err);
             }
         }
 
         // 3. Save
         setExportProgress("Komprimuji ZIP...");
         const content = await zip.generateAsync({ type: "blob" });
-        saveAs(content, `${fileNameBase}.zip`);
+        
+        // Robust Save Logic
+        // Determine the save function from FileSaver import which might be varied in ESM/CommonJS/Bundled environments
+        const saveFn = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
+        
+        if (typeof saveFn === 'function') {
+            saveFn(content, `${fileNameBase}.zip`);
+        } else {
+             // Fallback to native anchor tag
+             const url = URL.createObjectURL(content);
+             const a = document.createElement('a');
+             a.href = url;
+             a.download = `${fileNameBase}.zip`;
+             document.body.appendChild(a);
+             a.click();
+             document.body.removeChild(a);
+             URL.revokeObjectURL(url);
+        }
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Export failed", e);
-        alert("Export selhal. Zkontrolujte konzoli.");
+        alert(`Export selhal: ${e.message || 'Neznámá chyba'}. Zkontrolujte konzoli.`);
     } finally {
         setIsExporting(false);
         setExportProgress('');
