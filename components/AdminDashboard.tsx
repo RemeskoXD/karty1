@@ -120,41 +120,45 @@ const AdminDashboard: React.FC = () => {
 
   // --- EXPORT LOGIC ---
   const handleExportZip = async (order: Order) => {
-    if (isExporting || !exportRef.current) return;
+    console.log("Starting export for order:", order.id);
+    if (isExporting) return;
+    
+    // Safety check for ref
+    if (!exportRef.current) {
+        console.error("Export Ref is null! The hidden container is not mounted.");
+        alert("Chyba exportu: Interní chyba (Ref missing). Zkuste obnovit stránku.");
+        return;
+    }
+
     setIsExporting(true);
     
     try {
         const zip = new JSZip();
         
-        // Naming Convention: MC[ID_NUM]_[LASTNAME]_[GAME]_[COUNT]ks
-        // ID extraction: ORD-123456 -> 123456
+        // Naming Convention
         const idNum = order.id.replace('ORD-', '');
         const lastName = order.customer.lastName || 'Zakaznik';
         const gameShort = getGameShortCode(order.gameType);
-        // Assuming 1 pack per order for now as structure doesn't hold qty, defaulting to 1ks
         const fileNameBase = `MC${idNum}_${lastName}_${gameShort}_1ks`;
         
         // Calculate Dimensions for 300 DPI
         const dims = getPrintDimensions(order.gameType);
-        
-        // We will render to a hidden container that has exact pixel dimensions
-        // to ensure high resolution capture.
+        console.log("Export dimensions:", dims);
         
         // 1. Generate Faces
         for (let i = 0; i < order.deck.length; i++) {
             const card = order.deck[i];
-            const indexStr = (i + 1).toString().padStart(3, '0'); // 001, 002...
+            const indexStr = (i + 1).toString().padStart(3, '0');
             const fileName = `${indexStr}_${card.suit}_${card.rank}.png`;
             
             setExportProgress(`Generuji kartu ${i + 1} / ${order.deck.length}...`);
             
-            // Wait for React to render the specific card in the hidden container
+            // Wait for React to render
             await new Promise<void>(resolve => {
-                // We use a specific render function or state to update the hidden view
                 setExportingCard(card);
                 setExportingSide('face');
                 // Give it a moment to render image and load assets
-                setTimeout(resolve, 300); 
+                setTimeout(resolve, 350); 
             });
 
             if (exportRef.current) {
@@ -162,10 +166,10 @@ const AdminDashboard: React.FC = () => {
                     const blob = await htmlToImage.toBlob(exportRef.current, {
                         width: dims.width,
                         height: dims.height,
-                        pixelRatio: 1, // We set container to exact pixels, so ratio 1
-                        cacheBust: true, // Helps with CORS caching
-                        backgroundColor: 'white', // Ensure white background
-                        style: { transform: 'none' } // reset any potential transforms
+                        pixelRatio: 1, 
+                        cacheBust: true, 
+                        backgroundColor: 'white',
+                        style: { transform: 'none' }
                     });
                     if (blob) {
                         zip.file(fileName, blob);
@@ -175,14 +179,16 @@ const AdminDashboard: React.FC = () => {
                 } catch (err) {
                     console.error(`Error capturing card ${card.id}`, err);
                 }
+            } else {
+                console.error("Ref lost during loop");
             }
         }
 
         // 2. Generate Back
         setExportProgress("Generuji zadní stranu...");
-        setExportingCard(order.deck[0]); // Just need any card for context if needed, but primarily back config
+        setExportingCard(order.deck[0]); 
         setExportingSide('back');
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 350));
 
         if (exportRef.current) {
             try {
@@ -206,13 +212,12 @@ const AdminDashboard: React.FC = () => {
         const content = await zip.generateAsync({ type: "blob" });
         
         // Robust Save Logic
-        // Determine the save function from FileSaver import which might be varied in ESM/CommonJS/Bundled environments
         const saveFn = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
         
         if (typeof saveFn === 'function') {
             saveFn(content, `${fileNameBase}.zip`);
         } else {
-             // Fallback to native anchor tag
+             // Fallback
              const url = URL.createObjectURL(content);
              const a = document.createElement('a');
              a.href = url;
@@ -229,7 +234,7 @@ const AdminDashboard: React.FC = () => {
     } finally {
         setIsExporting(false);
         setExportProgress('');
-        setExportingCard(null); // Clear hidden view
+        setExportingCard(null); 
     }
   };
 
@@ -321,30 +326,30 @@ const AdminDashboard: React.FC = () => {
   }
 
   // --- HIDDEN EXPORT CONTAINER ---
-  // This is rendered outside the main flow but kept in DOM to allow html-to-image to capture it.
-  const exportDimensions = selectedOrder ? getPrintDimensions(selectedOrder.gameType) : { width: 0, height: 0 };
-  
+  // FIXED: Always render the container so the Ref is valid, just keep it off-screen.
+  // Using explicit dimensions to ensure html-to-image captures the right size.
   const ExportContainer = () => {
-      if (!isExporting || !exportingCard || !selectedOrder) return null;
+      const dims = selectedOrder ? getPrintDimensions(selectedOrder.gameType) : { width: 100, height: 100 };
 
-      // We explicitly render this in a div with fixed pixel width/height corresponding to 300 DPI
       return (
           <div style={{ position: 'absolute', top: -10000, left: -10000, overflow: 'hidden' }}>
               <div 
                   ref={exportRef}
                   style={{ 
-                      width: `${exportDimensions.width}px`, 
-                      height: `${exportDimensions.height}px`,
-                      backgroundColor: 'white' // Ensure non-transparent background for print
+                      width: `${dims.width}px`, 
+                      height: `${dims.height}px`,
+                      backgroundColor: 'white'
                   }}
               >
-                  <CardPreview 
-                      card={exportingCard} 
-                      backConfig={selectedOrder.backConfig}
-                      side={exportingSide}
-                      printMode={true} // Removes borders/shadows/rounded corners
-                      className="w-full h-full"
-                  />
+                  {isExporting && exportingCard && selectedOrder && (
+                      <CardPreview 
+                          card={exportingCard} 
+                          backConfig={selectedOrder.backConfig}
+                          side={exportingSide}
+                          printMode={true} 
+                          className="w-full h-full"
+                      />
+                  )}
               </div>
           </div>
       );
